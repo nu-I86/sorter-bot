@@ -1,5 +1,5 @@
 # sorter-bot
-A simple Minecraft bot designed to organize chests based on item categories, powered by Mineflayer. Commands are only accepted by the given username, everybody else gets ignored.
+A simple Minecraft bot designed to organize chests based on item categories, powered by Mineflayer. Commands are only accepted by the given username, everybody else gets ignored. Huge thanks to the creators of [mineflayer](https://github.com/PrismarineJS/mineflayer) for making this possible!
 
 ## Commands
 I'll revisit this when its ready to use
