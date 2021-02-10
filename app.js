@@ -35,8 +35,8 @@ var mcData;
 /** @type {null|"sorting"|"moving"} */
 var currentActivity = null;
 /** @type {SortingChest[]} */
-var sortChests = []
 //Cycles through the chests in order, and shifts them to the back once interacted with
+var sortChests = []
 
 bot.loadPlugin(pathfinder)
 
@@ -59,10 +59,50 @@ bot.once('spawn', () => {
         console.log('Goal reached')
         if (currentActivity == "sorting") {
             let block = bot.blockAt(sortChests[0].Vec3)
-            console.log(`Opening ${block}`)
+            let chest = sortChests[0]
             bot.lookAt(sortChests[0].Vec3).then(() => {
-                bot.openChest(block)
-                sortChests[0].emit("open")
+                let currentChest = bot.openChest(block)//open it
+
+                //define temp listeners
+                currentChest.once('open', () => {//once its opened
+                    currentChest.items().forEach(item => {//first check the items already in there
+                        console.log(item)
+                        if (chest.allowedItems.includes(item.name)) {//if its allowed to be there
+                            //ignore for now
+                        } else {//if its not allowed to be there
+                            //only take if inv has space
+                            if (bot.inventory.emptySlotCount() >= 1) {
+                                currentChest.withdraw(item.type, null, item.count).catch(() => {
+                                    console.log(`Failed to withdraw ${item.type}, my inventory is probably full`)
+                                })
+                            }
+                        }
+                    })
+
+                    //now see if anything from inv should go there
+                    bot.inventory.items().forEach(item => {
+                        if (chest.allowedItems.includes(item.name)) {
+                            currentChest.deposit(item.type, null, item.count).catch(() => {
+                                console.log(`Failed to deposit ${item.type}, the chest is probably full`)
+                            })
+                        }
+                    })
+                })
+
+                currentChest.once('close', () => {
+                    //move it to the back of the queue
+                    sortChests.push(sortChests.shift())
+                    //now tell the pathfinder to go to the next chest
+                    let nextBlock = sortChests[0]
+                    console.log("Going to " + nextBlock)
+                    bot.pathfinder.setGoal(new GoalNear(nextBlock.x, nextBlock.y, nextBlock.z, 2))
+                })
+
+                //now set a timeout to close it when its done
+                setTimeout(() => {
+                    currentChest.close()
+                    currentChest.removeAllListeners()
+                }, 3000);
             })
         }
     })
@@ -122,6 +162,14 @@ bot.once('spawn', () => {
             let tempBlock = sortChests[0]
             console.log("Going to " + tempBlock.Vec3)
             bot.pathfinder.setGoal(new GoalNear(tempBlock.x, tempBlock.y, tempBlock.z, 2))
+        } else if (message === "sayitems") {
+            let output = bot.inventory.items().map((i) => i.name).join(', ')
+            if (output) {
+                bot.chat(output)
+            } else {
+                bot.chat('empty')
+            }
+
         }
     })
 })
@@ -171,47 +219,6 @@ function setupChests(bot) {
             }
         }
     })
-    sortChests.forEach(chest => {
-        chest.removeAllListeners()//destroy listeners before adding new ones
-        chest.on('open', () => {//open the chest
-            console.log("Opened a chest")
-            chest.items().forEach(item => {//first check the items already in there
-                console.log(item)
-                if (chest.allowedItems.includes(item.name)) {//if its allowed to be there
-                    //ignore for now
-                } else {//if its not allowed to be there
-                    //only take if inv has space
-                    if (bot.inventory.emptySlotCount >= 1) {
-                        chest.withdraw(item.type, item.count).catch(() => {
-                            console.log(`Failed to withdraw ${item.type}, my inventory is probably full`)
-                        })
-                    }
-                }
-            })
-            //now see if anything from inv should go there
-            bot.inventory.items().forEach(item => {
-                if (chest.allowedItems.includes(item.name)) {
-                    chest.deposit(item.type, item.count).catch(() => {
-                        console.log(`Failed to deposit ${item.type}, the chest is probably full`)
-                    })
-                }
-            })
-            //done with this chest, its ok to close it now
-            chest.close()
-            sortChests[0].emit("close")
-        })
-
-        //close listener
-        chest.on('close', () => {
-            //move it to the back of the queue
-            sortChests.push(sortChests.shift())
-            //now tell the pathfinder to go to the next chest
-            let nextBlock = sortChests[0]
-            console.log("Going to " + nextBlock)
-            bot.pathfinder.setGoal(new GoalNear(nextBlock.x, nextBlock.y, nextBlock.z, 2))
-        })
-    })
-    console.log(sortChests)
 }
 
 /**
