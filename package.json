@@ -5,11 +5,11 @@
   "main": "app.js",
   "dependencies": {
     "dotenv": "^8.2.0",
+    "mineflayer": "^2.41.0",
     "mineflayer-pathfinder": "^1.0.11",
-    "mineflayer": "^2.32.0",
     "prismarine-block": "^1.7.1",
-    "prismarine-item": "^1.5.0",
-    "prismarine-entity": "^1.1.0"
+    "prismarine-entity": "^1.1.0",
+    "prismarine-item": "^1.5.0"
   },
   "devDependencies": {},
   "scripts": {
