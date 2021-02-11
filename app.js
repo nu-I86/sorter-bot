@@ -1,17 +1,12 @@
 const mineflayer = require('mineflayer')
-const pf = require('mineflayer-pathfinder')
 const config = require('./config.json')
 require('dotenv').config();//read the env
 
+console.log("Starting bot")
 //check config
 if (!process.env.BOT_OWNER) throw new Error("Owner not specified!")
 
 //maybe search for port if not supplied and 25565 wont work
-
-//ERROR timeouts are being caused by the pathfinder. Cant figure out why
-//may have to do with all the chest instances Im creating
-
-
 //remember to finish the building blocks category
 
 
@@ -28,18 +23,20 @@ const { pathfinder, Movements } = require('mineflayer-pathfinder')
 const { GoalNear, GoalBlock, GoalXZ, GoalY, GoalInvert, GoalFollow } = require('mineflayer-pathfinder').goals;
 const { Block } = require('prismarine-block');
 const { Vec3 } = require('vec3');
+const Chest = require('mineflayer/lib/chest');
 
 var defaultMove;
 var mcData;
 
-/** @type {null|"sorting"|"moving"} */
+/** @type {null|"settingUp"|"sorting"|"moving"} */
 var currentActivity = null;
-/** @type {SortingChest[]} */
+/** @type {Destination[]} */
 //Cycles through the chests in order, and shifts them to the back once interacted with
-var sortChests = []
+var allDestinations = []
 
 bot.loadPlugin(pathfinder)
 
+//#region Events
 bot.on('kicked', (reason, loggedIn) => console.log(reason, loggedIn))
 bot.on('error', err => console.log(err))
 
@@ -49,60 +46,19 @@ bot.once('spawn', () => {
 
     // We create different movement generators for different type of activity
     const defaultMove = new Movements(bot, mcData)
-
-    bot.on('path_update', (r) => {
-        const nodesPerTick = (r.visitedNodes * 50 / r.time).toFixed(2)
-        console.log(`I can get there in ${r.path.length} moves. Computation took ${r.time.toFixed(2)} ms (${nodesPerTick} nodes/tick).`)
-    })
+    //restrict movement because it's designed for safe, controlled environments
+    defaultMove.canDig = false;
+    defaultMove.allow1by1towers = false;
+    defaultMove.allowParkour = false;
+    defaultMove.allowFreeMotion = false;
 
     bot.on('goal_reached', (goal) => {
         console.log('Goal reached')
-        if (currentActivity == "sorting") {
-            let block = bot.blockAt(sortChests[0].Vec3)
-            let chest = sortChests[0]
-            bot.lookAt(sortChests[0].Vec3).then(() => {
-                let currentChest = bot.openChest(block)//open it
-
-                //define temp listeners
-                currentChest.once('open', () => {//once its opened
-                    currentChest.items().forEach(item => {//first check the items already in there
-                        console.log(item)
-                        if (chest.allowedItems.includes(item.name)) {//if its allowed to be there
-                            //ignore for now
-                        } else {//if its not allowed to be there
-                            //only take if inv has space
-                            if (bot.inventory.emptySlotCount() >= 1) {
-                                currentChest.withdraw(item.type, null, item.count).catch(() => {
-                                    console.log(`Failed to withdraw ${item.type}, my inventory is probably full`)
-                                })
-                            }
-                        }
-                    })
-
-                    //now see if anything from inv should go there
-                    bot.inventory.items().forEach(item => {
-                        if (chest.allowedItems.includes(item.name)) {
-                            currentChest.deposit(item.type, null, item.count).catch(() => {
-                                console.log(`Failed to deposit ${item.type}, the chest is probably full`)
-                            })
-                        }
-                    })
-                })
-
-                currentChest.once('close', () => {
-                    //move it to the back of the queue
-                    sortChests.push(sortChests.shift())
-                    //now tell the pathfinder to go to the next chest
-                    let nextBlock = sortChests[0]
-                    console.log("Going to " + nextBlock)
-                    bot.pathfinder.setGoal(new GoalNear(nextBlock.x, nextBlock.y, nextBlock.z, 2))
-                })
-
-                //now set a timeout to close it when its done
-                setTimeout(() => {
-                    currentChest.close()
-                    currentChest.removeAllListeners()
-                }, 3000);
+        if (currentActivity == "sorting" && allDestinations.length > 0) {
+            let chest = allDestinations[0]
+            let block = bot.blockAt(chest.Vec3)
+            bot.lookAt(chest.Vec3).then(() => {
+                bot.openChest(block)//open it
             })
         }
     })
@@ -157,11 +113,6 @@ bot.once('spawn', () => {
         } else if (message === 'sort') {
             //register chests
             setupChests(bot)
-            currentActivity = "sorting";
-            //starts the loop
-            let tempBlock = sortChests[0]
-            console.log("Going to " + tempBlock.Vec3)
-            bot.pathfinder.setGoal(new GoalNear(tempBlock.x, tempBlock.y, tempBlock.z, 2))
         } else if (message === "sayitems") {
             let output = bot.inventory.items().map((i) => i.name).join(', ')
             if (output) {
@@ -172,54 +123,135 @@ bot.once('spawn', () => {
 
         }
     })
-})
-//#region Classes
 
+    bot.on('windowOpen', (window) => {
+        if (window.type == "minecraft:chest" && currentActivity == "sorting") {
+            //during normal operation
+            var currentChest = allDestinations[0]
+            var chestInv = window.slots
+            var botInv = bot.inventory.slots
+            console.log(chestInv)
+            console.log(botInv)
+
+            //check items in chest first
+            chestInv.forEach(item => {
+                if (item) {
+                    let emptySlot = window.firstEmptyInventorySlot()
+                    //if not allowed to be there
+                    if (!currentChest.allowedItems.includes(item.name)) {
+                        //and free space in inventory
+                        if (emptySlot) {
+                            try {
+                                //take it out
+                                bot.inventory.updateSlot(emptySlot, item)
+                            } catch (err) {
+                                console.log(`Failed to move ${item.name} to slot ${emptySlot}: ${err}`)
+                            }
+                        } else {
+                            console.log(`Tried to take an item, but my inventory is full`)
+                        }
+                    }
+                }
+            })
+
+            //now put stuff there if it can
+            botInv.forEach(item => {
+                if (item) {
+                    let emptyChestSlot = null
+                    for (let i = 0; i < chestInv.length; i++) {
+                        //I had to do this one the rough way
+                        if (!chestInv[i]) emptyChestSlot = i;
+                    }
+                    //if it should be in the chest
+                    if (currentChest.allowedItems.includes(item.name)) {
+                        //and free space in the chest
+                        if (emptyChestSlot) {
+                            try {
+                                //put it in
+                                window.updateSlot(emptyChestSlot, item)
+                            } catch (err) {
+                                console.log(`Failed to move ${item.name} to slot ${emptyChestSlot}: ${err}`)
+                            }
+                        } else {
+                            console.log("This chest is full")
+                        }
+                    }
+                }
+            })
+
+            setTimeout(() => {
+                //moves it to the back of the queue
+                allDestinations.push(allDestinations.shift())
+                bot.closeWindow(window)
+                //set the next target
+                let nextVec3 = allDestinations[0].Vec3
+                bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
+            }, 3000);
+        }
+    })
+})
+//#endregion
+
+//#region Classes
 /**
  * Attaches a useful category label to chests for the bot
  */
-class SortingChest extends mineflayer.Chest {
+class Destination {
     /**
      * @param {"potions"|"brewing"|"weapons"|"food"|"farming"|"transport"|"tools"|"armor"|"glass"|"wool"|"redstone"|"concrete"|"banner"|"building_blocks"|"ore"|"dye"|"clay"|"materials"|"music"|"misc"} 
      *type The category seen by the bot - REQUIRED
      */
     constructor(type, x, y, z) {
-        super();
         this.type = type
-        this.allowedItems = config.categories.find(cat => cat.name == type).items
+        //just leave blank if not found
+        this.allowedItems = config.categories.find(cat => cat.name == type) ? config.categories.find(cat => cat.name == type).items : []
         this.x = x
         this.y = y
         this.z = z
+        //for convenience
         this.Vec3 = new Vec3(x, y, z)
     }
 }
-
-
 //#endregion
+
 //#region Functions
 
 /**
  * Scans and returns any chests it finds, or null if it can't find any
  * @param {mineflayer.Bot} bot The bot that will setup its chests
- * @returns {SortingChest[]|null} The results of the search. Can be null
+ * @returns {Destination[]|null} The results of the search. Can be null
  */
 function setupChests(bot) {
-    sortChests = [];//empty the list first
-    //dont forget to catch specialty chests too, e.g. "Gold" would override the classifier and cause the bot to prioritize putting gold in there if it can
+    allDestinations = [];//empty the list first
+    //don't forget to catch specialty chests too, e.g. "Gold" would override the classifier and cause the bot to prioritize putting gold in there if it can
     bot.findBlocks({ matching: 54, count: 10 }).forEach(block => {//searches for chests
-        console.log("Testing " + block);
         let signText = testAround(block.x, block.y, block.z)
         if (signText) {
+            var text = signText.trim().toLowerCase()
             var entry = config.categories.find(category =>
-                category.aliases.includes(signText.trim().toLowerCase())
+                category.aliases.includes(text)
             )
             if (entry) {
-                sortChests.push(new SortingChest(entry.name, block.x, block.y, block.z))
+                allDestinations.push(new Destination(entry.name, block.x, block.y, block.z))
+                bot.chat(`Registered ${block} as ${entry.name}`)
                 console.log(`Registered ${block} as ${entry.name}`)
+            } else {
+                bot.chat(`Just a heads up, I'm not sure how to categorize "${text}," so I'll ignore it`)
+                console.log(`I wasn't sure how to categorize ${text}`)
             }
         }
     })
+    if (allDestinations.length > 0) {
+        let o = allDestinations[0].Vec3
+        bot.pathfinder.setGoal(new GoalNear(o.x, o.y, o.z, 2))
+        currentActivity = "sorting"
+    } else {
+        bot.chat("There aren't any chests with signs on them nearby!")
+        bot.chat("Please lead me to your chest room before using this command.")
+    }
 }
+
+
 
 /**
  * Searches for a sign around the block, and returns the text if found
