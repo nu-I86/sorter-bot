@@ -24,6 +24,7 @@ const { GoalNear, GoalBlock, GoalXZ, GoalY, GoalInvert, GoalFollow } = require('
 const { Block } = require('prismarine-block');
 const { Vec3 } = require('vec3');
 const Chest = require('mineflayer/lib/chest');
+const { Item } = require('prismarine-item');
 
 var defaultMove;
 var mcData;
@@ -34,7 +35,12 @@ var currentActivity = null;
 //Cycles through the chests in order, and shifts them to the back once interacted with
 var allDestinations = []
 
+//load and configure plugins
 bot.loadPlugin(pathfinder)
+const inventoryViewer = require('mineflayer-web-inventory')
+let options = {
+    port: 8080
+}
 
 //#region Events
 bot.on('kicked', (reason, loggedIn) => console.log(reason, loggedIn))
@@ -43,6 +49,8 @@ bot.on('error', err => console.log(err))
 bot.once('spawn', () => {
     // Once we've spawn, it is safe to access mcData because we know the version
     const mcData = require('minecraft-data')(bot.version)
+    const mcItem = require('prismarine-item')(bot.version)
+    inventoryViewer(bot, options)
 
     // We create different movement generators for different type of activity
     const defaultMove = new Movements(bot, mcData)
@@ -130,13 +138,11 @@ bot.once('spawn', () => {
             var currentChest = allDestinations[0]
             var chestInv = window.slots
             var botInv = bot.inventory.slots
-            console.log(chestInv)
-            console.log(botInv)
 
             //check items in chest first
             chestInv.forEach(item => {
                 if (item) {
-                    let emptySlot = window.firstEmptyInventorySlot()
+                    let emptySlot = bot.inventory.firstEmptyInventorySlot()
                     //if not allowed to be there
                     if (!currentChest.allowedItems.includes(item.name)) {
                         //and free space in inventory
@@ -157,11 +163,7 @@ bot.once('spawn', () => {
             //now put stuff there if it can
             botInv.forEach(item => {
                 if (item) {
-                    let emptyChestSlot = null
-                    for (let i = 0; i < chestInv.length; i++) {
-                        //I had to do this one the rough way
-                        if (!chestInv[i]) emptyChestSlot = i;
-                    }
+                    let emptyChestSlot = window.firstEmptyInventorySlot()
                     //if it should be in the chest
                     if (currentChest.allowedItems.includes(item.name)) {
                         //and free space in the chest
