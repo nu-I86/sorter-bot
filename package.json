@@ -9,7 +9,8 @@
     "mineflayer-pathfinder": "^1.0.11",
     "prismarine-block": "^1.7.1",
     "prismarine-entity": "^1.1.0",
-    "prismarine-item": "^1.5.0"
+    "prismarine-item": "^1.5.0",
+    "prismarine-windows": "^2.0.0"
   },
   "devDependencies": {},
   "scripts": {
