@@ -8,7 +8,8 @@ if (!process.env.BOT_OWNER) throw new Error("Owner not specified!")
 
 //maybe search for port if not supplied and 25565 wont work
 //remember to finish the building blocks category
-
+//problem with bot thinking it took items, when it actually didn't
+//making it async seems to make no difference
 
 
 const bot = mineflayer.createBot({
@@ -34,6 +35,8 @@ var currentActivity = null;
 /** @type {Destination[]} */
 //Cycles through the chests in order, and shifts them to the back once interacted with
 var allDestinations = []
+/** @type {mineflayer.Chest} */
+var currentChestBlock;
 
 //load and configure plugins
 bot.loadPlugin(pathfinder)
@@ -66,7 +69,7 @@ bot.once('spawn', () => {
             let chest = allDestinations[0]
             let block = bot.blockAt(chest.Vec3)
             bot.lookAt(chest.Vec3).then(() => {
-                bot.openChest(block)//open it
+                currentChestBlock = bot.openChest(block)//open it
             })
         }
     })
@@ -136,50 +139,61 @@ bot.once('spawn', () => {
         if (window.type == "minecraft:chest" && currentActivity == "sorting") {
             //during normal operation
             var currentChest = allDestinations[0]
-            var chestInv = window.slots
-            var botInv = bot.inventory.slots
+            var chestInv = window.itemsRange(0, window.inventoryStart - 1)
+            var botInv = window.itemsRange(window.inventoryStart, window.inventoryEnd)
 
             //check items in chest first
-            chestInv.forEach(item => {
-                if (item) {
-                    let emptySlot = bot.inventory.firstEmptyInventorySlot()
-                    //if not allowed to be there
-                    if (!currentChest.allowedItems.includes(item.name)) {
-                        //and free space in inventory
-                        if (emptySlot) {
-                            try {
+            setTimeout(() => {
+                if (!currentChestBlock.window) {
+                    console.log("Chest window failed to load in time!")
+                    return;
+                }
+                chestInv.forEach(async item => {
+                    if (item) {
+                        //if not allowed to be there
+                        if (!currentChest.allowedItems.includes(item.name)) {
+                            //and free space in inventory
+                            if (bot.inventory.emptySlotCount() > 0) {
+                                //try {
                                 //take it out
-                                bot.inventory.updateSlot(emptySlot, item)
-                            } catch (err) {
-                                console.log(`Failed to move ${item.name} to slot ${emptySlot}: ${err}`)
+                                await currentChestBlock.withdraw(item.type, item.metadata, item.count)
+                                //} catch (err) {
+                                //    console.log(`Failed to move ${item.name} to inventory: ${err}`)
+                                //}
+                            } else {
+                                console.log(`Tried to take an item, but my inventory is full`)
                             }
-                        } else {
-                            console.log(`Tried to take an item, but my inventory is full`)
                         }
                     }
-                }
-            })
+                })
+            }, 1000);
 
             //now put stuff there if it can
-            botInv.forEach(item => {
-                if (item) {
-                    let emptyChestSlot = window.firstEmptyInventorySlot()
-                    //if it should be in the chest
-                    if (currentChest.allowedItems.includes(item.name)) {
-                        //and free space in the chest
-                        if (emptyChestSlot) {
-                            try {
+            setTimeout(() => {
+                if (!currentChestBlock.window) {
+                    console.log("Chest window failed to load in time!")
+                    return;
+                }
+                botInv.forEach(async item => {
+                    if (item) {
+                        let emptyChestSlot = window.firstEmptyInventorySlot()
+                        //if it should be in the chest
+                        if (currentChest.allowedItems.includes(item.name)) {
+                            //and free space in the chest
+                            if (emptyChestSlot) {
+                                //try {
                                 //put it in
-                                window.updateSlot(emptyChestSlot, item)
-                            } catch (err) {
-                                console.log(`Failed to move ${item.name} to slot ${emptyChestSlot}: ${err}`)
+                                await currentChestBlock.deposit(item.type, item.metadata, item.count)
+                                //} catch (err) {
+                                //    console.log(`Failed to move ${item.name} to chest slot ${emptyChestSlot}: ${err}`)
+                                //}
+                            } else {
+                                console.log("This chest is full")
                             }
-                        } else {
-                            console.log("This chest is full")
                         }
                     }
-                }
-            })
+                })
+            }, 1500);
 
             setTimeout(() => {
                 //moves it to the back of the queue
@@ -188,7 +202,7 @@ bot.once('spawn', () => {
                 //set the next target
                 let nextVec3 = allDestinations[0].Vec3
                 bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
-            }, 3000);
+            }, 5000);
         }
     })
 })
