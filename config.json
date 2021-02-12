@@ -746,6 +746,18 @@
                 "unknown"
             ],
             "items": []
+        },
+        {
+            "name": "deposit",
+            "aliases": [
+                "deposit",
+                "drop-off",
+                "drop off",
+                "dump",
+                "unload",
+                "random"
+            ],
+            "items": []
         }
     ]
 }
