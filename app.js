@@ -35,8 +35,14 @@ var currentActivity = null;
 /** @type {Destination[]} */
 //Cycles through the chests in order, and shifts them to the back once interacted with
 var allDestinations = []
-/** @type {mineflayer.Chest} */
+/** @type {mineflayer.Chest} Used for storage operations */
 var currentChestBlock;
+/** @type {boolean} If true, the bot will prioritize emptying the deposit chest  */
+var dedicatedDepositMode;//this will most likely complicate the bots travel path
+/** @type {Item[]} */
+var itemDepositQueue = []
+/** @type {Item[]} */
+var itemWithdrawQueue = []
 
 //load and configure plugins
 bot.loadPlugin(pathfinder)
@@ -139,70 +145,46 @@ bot.once('spawn', () => {
         if (window.type == "minecraft:chest" && currentActivity == "sorting") {
             //during normal operation
             var currentChest = allDestinations[0]
-            var chestInv = window.itemsRange(0, window.inventoryStart - 1)
-            var botInv = window.itemsRange(window.inventoryStart, window.inventoryEnd)
+            var chestRange = { start: 0, end: 26 }
+            if (window.title == '{"translate":"container.chestDouble"}') chestRange.end = 53
+            var chestInv;//has to change inventory slots depending on the size of the chest
+            window.title == '{"translate":"container.chestDouble"}' ? chestInv = window.itemsRange(0, 53) : chestInv = window.itemsRange(0, 26)
+            var botInv = bot.inventory.items()
 
-            //check items in chest first
-            setTimeout(() => {
-                if (!currentChestBlock.window) {
-                    console.log("Chest window failed to load in time!")
-                    return;
-                }
-                chestInv.forEach(async item => {
-                    if (item) {
-                        //if not allowed to be there
-                        if (!currentChest.allowedItems.includes(item.name)) {
-                            //and free space in inventory
-                            if (bot.inventory.emptySlotCount() > 0) {
-                                //try {
-                                //take it out
-                                await currentChestBlock.withdraw(item.type, item.metadata, item.count)
-                                //} catch (err) {
-                                //    console.log(`Failed to move ${item.name} to inventory: ${err}`)
-                                //}
-                            } else {
-                                console.log(`Tried to take an item, but my inventory is full`)
-                            }
+            //first see if it needs to put anything in there
+            botInv.forEach(item => {
+                if (item) {
+                    let emptyChestSlot = window.firstEmptySlotRange(0, chestRange.end)
+                    //if it should be in the chest
+                    if (currentChest.allowedItems.includes(item.name)) {
+                        //and free space in the chest
+                        if (emptyChestSlot || emptyChestSlot == 0) {
+                            //let the que manager deposit
+                            itemDepositQueue.push(item)
+                        } else {
+                            console.log("This chest is full")
                         }
                     }
-                })
-            }, 1000);
-
-            //now put stuff there if it can
-            setTimeout(() => {
-                if (!currentChestBlock.window) {
-                    console.log("Chest window failed to load in time!")
-                    return;
                 }
-                botInv.forEach(async item => {
-                    if (item) {
-                        let emptyChestSlot = window.firstEmptyInventorySlot()
-                        //if it should be in the chest
-                        if (currentChest.allowedItems.includes(item.name)) {
-                            //and free space in the chest
-                            if (emptyChestSlot) {
-                                //try {
-                                //put it in
-                                await currentChestBlock.deposit(item.type, item.metadata, item.count)
-                                //} catch (err) {
-                                //    console.log(`Failed to move ${item.name} to chest slot ${emptyChestSlot}: ${err}`)
-                                //}
-                            } else {
-                                console.log("This chest is full")
-                            }
+            })
+
+            //now check for stuff it should take
+            chestInv.forEach(item => {
+                if (item) {
+                    //if not allowed to be there
+                    if (!currentChest.allowedItems.includes(item.name)) {
+                        //and free space in inventory
+                        if (bot.inventory.emptySlotCount() > 0) {
+                            //let the que manager withdraw it
+                            itemWithdrawQueue.push(item)
+                        } else {
+                            console.log(`Tried to take an item, but my inventory is full`)
                         }
                     }
-                })
-            }, 1500);
+                }
+            })
 
-            setTimeout(() => {
-                //moves it to the back of the queue
-                allDestinations.push(allDestinations.shift())
-                bot.closeWindow(window)
-                //set the next target
-                let nextVec3 = allDestinations[0].Vec3
-                bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
-            }, 5000);
+
         }
     })
 })
@@ -297,5 +279,61 @@ function testAround(x, y, z) {
     }
     return null;
 }
+
+//deposits or extracts items
+setInterval(async () => {
+    //bots ability to use inventories seems to be affected by the amount of time given, how unfortunate
+    if (currentChestBlock) {
+        //make sure the window is open too, just for good measure
+        if (currentChestBlock.window) {
+            if (itemDepositQueue.length > 0) {
+                //prioritizes depositing
+                let item = itemDepositQueue[0]
+                console.log(`Depositing ${item.name} x${item.count}`)
+                await currentChestBlock.deposit(item.type, item.metadata, item.count)
+                currentChestBlock.window
+                itemDepositQueue.shift()
+            }
+            if (itemWithdrawQueue.length > 0) {
+                //then withdraw if it needs to
+                let item = itemWithdrawQueue[0]
+                console.log(`Withdrawing ${item.name} x${item.count}`)
+                await currentChestBlock.withdraw(item.type, item.metadata, item.count, err => {
+                    if (err) console.log(err);
+                })
+                itemWithdrawQueue.shift()
+            }
+        }
+    } else {
+        //items should never be in the queue without a destination
+        if (itemDepositQueue.length > 0) {
+            console.log("Items were in the deposit que without a destination!")
+            itemDepositQueue = []
+        }
+        if (itemWithdrawQueue.length > 0) {
+            console.log("Items were in the withdraw que without a destination!")
+            itemWithdrawQueue = []
+        }
+    }
+}, 500);
+
+setInterval(() => {
+    //only moves on when its done with the chest
+    if (itemDepositQueue.length == 0 && itemWithdrawQueue.length == 0 && currentChestBlock) {
+        if (currentChestBlock.window) {
+            if (currentChestBlock.window.selectedItem) {
+                console.log("Still holding an item!")
+            } else {
+                //moves it to the back of the queue
+                allDestinations.push(allDestinations.shift())
+                bot.closeWindow(currentChestBlock.window)
+                currentChestBlock = null;
+                //set the next target
+                let nextVec3 = allDestinations[0].Vec3
+                bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
+            }
+        }
+    }
+}, 10000);
 
 //#endregion
