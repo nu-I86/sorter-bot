@@ -2,16 +2,13 @@ const mineflayer = require('mineflayer')
 const config = require('./config.json')
 require('dotenv').config();//read the env
 
-console.log("Starting bot")
-//check config
-if (!process.env.BOT_OWNER) throw new Error("Owner not specified!")
 
-//maybe search for port if not supplied and 25565 wont work
 //remember to finish the building blocks category
 //problem with bot thinking it took items, when it actually didn't
 //making it async seems to make no difference
 
-
+//check config
+if (!process.env.BOT_OWNER) throw new Error("Owner not specified!")
 const bot = mineflayer.createBot({
     host: process.env.TARGET_HOST ? process.env.TARGET_HOST : "localhost",
     port: process.env.TARGET_PORT ? process.env.TARGET_PORT : 25565,
@@ -22,15 +19,17 @@ const bot = mineflayer.createBot({
 
 const { pathfinder, Movements } = require('mineflayer-pathfinder')
 const { GoalNear, GoalBlock, GoalXZ, GoalY, GoalInvert, GoalFollow } = require('mineflayer-pathfinder').goals;
-const { Block } = require('prismarine-block');
 const { Vec3 } = require('vec3');
-const Chest = require('mineflayer/lib/chest');
 const { Item } = require('prismarine-item');
 
+/** @type {Movements} */
 var defaultMove;
 var mcData;
 
-/** @type {null|"settingUp"|"sorting"|"moving"} */
+//If you decide to manually configure this script, don't change anything below this line
+//it may lead to undesired results
+
+/** @type {null|"sorting"} */
 var currentActivity = null;
 /** @type {Destination[]} */
 //Cycles through the chests in order, and shifts them to the back once interacted with
@@ -44,22 +43,50 @@ var itemDepositQueue = []
 /** @type {Item[]} */
 var itemWithdrawQueue = []
 
+
 //load and configure plugins
 bot.loadPlugin(pathfinder)
 const inventoryViewer = require('mineflayer-web-inventory')
-let options = {
+let invViewerOps = {
     port: 8080
 }
 
+//#region Classes
+/**
+ * Attaches a useful category label to chests for the bot
+ */
+class Destination {
+    /**
+     * @param {"potions"|"brewing"|"weapons"|"food"|"farming"|"transport"|"tools"|"armor"|"glass"|"wool"|"redstone"|"concrete"|"banner"|"building_blocks"|"ore"|"dye"|"clay"|"materials"|"music"|"misc"} 
+     *type The category seen by the bot - REQUIRED
+     */
+    constructor(type, x, y, z) {
+        this.type = type
+        //just leave blank if not found
+        this.allowedItems = config.categories.find(cat => cat.name == type) ? config.categories.find(cat => cat.name == type).items : []
+        this.x = x
+        this.y = y
+        this.z = z
+        //for convenience
+        this.Vec3 = new Vec3(x, y, z)
+    }
+}
+//#endregion
+
+console.log("Starting bot")
 //#region Events
 bot.on('kicked', (reason, loggedIn) => console.log(reason, loggedIn))
+bot.on('login', () => {
+    console.log("Logged in")
+
+})
+bot.on('death', () => console.log("I died..."))
 bot.on('error', err => console.log(err))
 
 bot.once('spawn', () => {
-    // Once we've spawn, it is safe to access mcData because we know the version
+    // Save to access data and start inv viewer after spawning
     const mcData = require('minecraft-data')(bot.version)
-    const mcItem = require('prismarine-item')(bot.version)
-    inventoryViewer(bot, options)
+    inventoryViewer(bot, invViewerOps)
 
     // We create different movement generators for different type of activity
     const defaultMove = new Movements(bot, mcData)
@@ -70,7 +97,7 @@ bot.once('spawn', () => {
     defaultMove.allowFreeMotion = false;
 
     bot.on('goal_reached', (goal) => {
-        console.log('Goal reached')
+        console.log(`Moved to (${goal.x}, ${goal.y}, ${goal.z})`)
         if (currentActivity == "sorting" && allDestinations.length > 0) {
             let chest = allDestinations[0]
             let block = bot.blockAt(chest.Vec3)
@@ -91,6 +118,7 @@ bot.once('spawn', () => {
             }
             const p = target.position
 
+            currentActivity = null;
             bot.pathfinder.setMovements(defaultMove)
             bot.pathfinder.setGoal(new GoalNear(p.x, p.y, p.z, 1))
         } else if (message.startsWith('goto')) {
@@ -142,13 +170,13 @@ bot.once('spawn', () => {
     })
 
     bot.on('windowOpen', (window) => {
-        if (window.type == "minecraft:chest" && currentActivity == "sorting") {
+        if ((window.type == "minecraft:chest" || window.type == "minecraft:generic_9x3" || window.type == "minecraft:generic_9x6") && currentActivity == "sorting") {
             //during normal operation
             var currentChest = allDestinations[0]
             var chestRange = { start: 0, end: 26 }
-            if (window.title == '{"translate":"container.chestDouble"}') chestRange.end = 53
+            if (window.title == '{"translate":"container.chestDouble"}' || window.type == "minecraft:generic_9x6") chestRange.end = 53
             var chestInv;//has to change inventory slots depending on the size of the chest
-            window.title == '{"translate":"container.chestDouble"}' ? chestInv = window.itemsRange(0, 53) : chestInv = window.itemsRange(0, 26)
+            window.title == '{"translate":"container.chestDouble"}' || window.type == "minecraft:generic_9x6" ? chestInv = window.itemsRange(0, 53) : chestInv = window.itemsRange(0, 26)
             var botInv = bot.inventory.items()
 
             //first see if it needs to put anything in there
@@ -190,28 +218,6 @@ bot.once('spawn', () => {
 })
 //#endregion
 
-//#region Classes
-/**
- * Attaches a useful category label to chests for the bot
- */
-class Destination {
-    /**
-     * @param {"potions"|"brewing"|"weapons"|"food"|"farming"|"transport"|"tools"|"armor"|"glass"|"wool"|"redstone"|"concrete"|"banner"|"building_blocks"|"ore"|"dye"|"clay"|"materials"|"music"|"misc"} 
-     *type The category seen by the bot - REQUIRED
-     */
-    constructor(type, x, y, z) {
-        this.type = type
-        //just leave blank if not found
-        this.allowedItems = config.categories.find(cat => cat.name == type) ? config.categories.find(cat => cat.name == type).items : []
-        this.x = x
-        this.y = y
-        this.z = z
-        //for convenience
-        this.Vec3 = new Vec3(x, y, z)
-    }
-}
-//#endregion
-
 //#region Functions
 
 /**
@@ -222,7 +228,9 @@ class Destination {
 function setupChests(bot) {
     allDestinations = [];//empty the list first
     //don't forget to catch specialty chests too, e.g. "Gold" would override the classifier and cause the bot to prioritize putting gold in there if it can
-    bot.findBlocks({ matching: 54, count: 10 }).forEach(block => {//searches for chests
+    bot.findBlocks({
+        matching: block => block.displayName == "Chest" ? true : false, count: 10
+    }).forEach(block => {//searches for chests
         let signText = testAround(block.x, block.y, block.z)
         if (signText) {
             var text = signText.trim().toLowerCase()
@@ -261,20 +269,20 @@ function setupChests(bot) {
 function testAround(x, y, z) {
     let testPos = new Vec3(x, y, z)
     testPos.x++;
-    if (bot.blockAt(testPos).type == 68) {//pos x
+    if (bot.blockAt(testPos).name.includes("sign")) {//pos x
         return bot.blockAt(testPos).signText
     }
     testPos.x -= 2;
-    if (bot.blockAt(testPos).type == 68) {//negative x
+    if (bot.blockAt(testPos).name.includes("sign")) {//negative x
         return bot.blockAt(testPos).signText
     }
     testPos.x++;//reset x
     testPos.z++;
-    if (bot.blockAt(testPos).type == 68) {//pos z
+    if (bot.blockAt(testPos).name.includes("sign")) {//pos z
         return bot.blockAt(testPos).signText
     }
     testPos.z -= 2;
-    if (bot.blockAt(testPos).type == 68) {//negative z
+    if (bot.blockAt(testPos).name.includes("sign")) {//negative z
         return bot.blockAt(testPos).signText
     }
     return null;
@@ -286,22 +294,29 @@ setInterval(async () => {
     if (currentChestBlock) {
         //make sure the window is open too, just for good measure
         if (currentChestBlock.window) {
+
             if (itemDepositQueue.length > 0) {
                 //prioritizes depositing
                 let item = itemDepositQueue[0]
                 console.log(`Depositing ${item.name} x${item.count}`)
-                await currentChestBlock.deposit(item.type, item.metadata, item.count)
-                currentChestBlock.window
-                itemDepositQueue.shift()
+                currentChestBlock.window.selectedItem = item
+                await currentChestBlock.deposit(item.type, item.metadata, item.count, (err) => {
+                    if (err) console.log(err)
+                }).then(() => {
+                    itemDepositQueue.shift()
+                })
             }
             if (itemWithdrawQueue.length > 0) {
                 //then withdraw if it needs to
                 let item = itemWithdrawQueue[0]
                 console.log(`Withdrawing ${item.name} x${item.count}`)
-                await currentChestBlock.withdraw(item.type, item.metadata, item.count, err => {
-                    if (err) console.log(err);
+                currentChestBlock.window.selectedItem = item
+                await currentChestBlock.withdraw(item.type, item.metadata, item.count, (err) => {
+                    if (err) console.log(err)
+                }).then(() => {
+                    itemWithdrawQueue.shift()
                 })
-                itemWithdrawQueue.shift()
+
             }
         }
     } else {
@@ -333,7 +348,10 @@ setInterval(() => {
                 bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
             }
         }
+    } else if (!currentActivity && currentChestBlock) {
+        //if its told to stop while in a chest
+        bot.closeWindow(currentChestBlock.window)
     }
-}, 10000);
+}, 3000);
 
 //#endregion
