@@ -289,18 +289,16 @@ function testAround(x, y, z) {
 }
 
 //deposits or extracts items
-setInterval(async () => {
+setInterval(() => {
     //bots ability to use inventories seems to be affected by the amount of time given, how unfortunate
     if (currentChestBlock) {
         //make sure the window is open too, just for good measure
         if (currentChestBlock.window) {
-
             if (itemDepositQueue.length > 0) {
                 //prioritizes depositing
                 let item = itemDepositQueue[0]
                 console.log(`Depositing ${item.name} x${item.count}`)
-                currentChestBlock.window.selectedItem = item
-                await currentChestBlock.deposit(item.type, item.metadata, item.count, (err) => {
+                currentChestBlock.deposit(item.type, null, item.count, (err) => {
                     if (err) console.log(err)
                 }).then(() => {
                     itemDepositQueue.shift()
@@ -310,8 +308,7 @@ setInterval(async () => {
                 //then withdraw if it needs to
                 let item = itemWithdrawQueue[0]
                 console.log(`Withdrawing ${item.name} x${item.count}`)
-                currentChestBlock.window.selectedItem = item
-                await currentChestBlock.withdraw(item.type, item.metadata, item.count, (err) => {
+                currentChestBlock.withdraw(item.type, null, item.count, (err) => {
                     if (err) console.log(err)
                 }).then(() => {
                     itemWithdrawQueue.shift()
