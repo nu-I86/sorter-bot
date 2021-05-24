@@ -9,7 +9,7 @@ require('dotenv').config();//read the env
 
 //check config
 if (!process.env.BOT_OWNER) throw new Error("Owner not specified!")
-const bot = mineflayer.createBot({
+var bot = mineflayer.createBot({
     host: process.env.TARGET_HOST ? process.env.TARGET_HOST : "localhost",
     port: process.env.TARGET_PORT ? process.env.TARGET_PORT : 25565,
     username: process.env.BOT_USERNAME ? process.env.BOT_USERNAME : "sorter_bot",
@@ -289,29 +289,36 @@ function testAround(x, y, z) {
 }
 
 //deposits or extracts items
-setInterval(() => {
+setInterval(async () => {
     //bots ability to use inventories seems to be affected by the amount of time given, how unfortunate
     if (currentChestBlock) {
         //make sure the window is open too, just for good measure
         if (currentChestBlock.window) {
             if (itemDepositQueue.length > 0) {
                 //prioritizes depositing
-                let item = itemDepositQueue[0]
-                console.log(`Depositing ${item.name} x${item.count}`)
-                currentChestBlock.deposit(item.type, null, item.count, (err) => {
-                    if (err) console.log(err)
+                var depItem = itemDepositQueue[0]
+                console.log(`Depositing ${depItem.name} x${depItem.count}`)
+                //currently an issue with the window manager not selecting the blocks
+                //manually setting the property worked a few times, but I couldnt get it working again for some reason
+                bot.inventory.selectedItem = depItem
+                await currentChestBlock.deposit(depItem.type, depItem.metadata, depItem.count, (err) => {
+                    console.log(depItem)
+                    if (err) { throw err }
                 }).then(() => {
                     itemDepositQueue.shift()
+                    bot.inventory.selectedItem = null
                 })
             }
             if (itemWithdrawQueue.length > 0) {
                 //then withdraw if it needs to
-                let item = itemWithdrawQueue[0]
-                console.log(`Withdrawing ${item.name} x${item.count}`)
-                currentChestBlock.withdraw(item.type, null, item.count, (err) => {
+                var witItem = itemWithdrawQueue[0]
+                console.log(`Withdrawing ${witItem.name} x${witItem.count}`)
+                bot.inventory.selectedItem = witItem
+                await currentChestBlock.withdraw(witItem.type, witItem.metadata, witItem.count, (err) => {
                     if (err) console.log(err)
                 }).then(() => {
                     itemWithdrawQueue.shift()
+                    bot.inventory.selectedItem = null
                 })
 
             }
@@ -327,7 +334,7 @@ setInterval(() => {
             itemWithdrawQueue = []
         }
     }
-}, 500);
+}, 350);
 
 setInterval(() => {
     //only moves on when its done with the chest
@@ -340,6 +347,8 @@ setInterval(() => {
                 allDestinations.push(allDestinations.shift())
                 bot.closeWindow(currentChestBlock.window)
                 currentChestBlock = null;
+                itemDepositQueue = []
+                itemWithdrawQueue = []
                 //set the next target
                 let nextVec3 = allDestinations[0].Vec3
                 bot.pathfinder.setGoal(new GoalNear(nextVec3.x, nextVec3.y, nextVec3.z, 2))
