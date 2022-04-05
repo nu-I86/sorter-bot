@@ -4,14 +4,14 @@
   "description": "A simple Minecraft bot designed to organize chests based on item categories, powered by Mineflayer.",
   "main": "app.js",
   "dependencies": {
-    "dotenv": "^8.2.0",
-    "mineflayer": "^2.41.0",
-    "mineflayer-pathfinder": "^1.5.0",
-    "mineflayer-web-inventory": "^1.2.1",
-    "prismarine-block": "^1.7.3",
-    "prismarine-entity": "^1.1.0",
-    "prismarine-item": "^1.5.0",
-    "prismarine-windows": "^2.0.0"
+    "dotenv": "^16.0.0",
+    "mineflayer": "^4.2.0",
+    "mineflayer-pathfinder": "^2.0.0",
+    "mineflayer-web-inventory": "^1.7.1",
+    "prismarine-block": "^1.15.0",
+    "prismarine-entity": "^2.1.0",
+    "prismarine-item": "^1.11.3",
+    "prismarine-windows": "^2.4.3"
   },
   "devDependencies": {},
   "scripts": {
