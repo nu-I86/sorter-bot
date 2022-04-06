@@ -2,6 +2,10 @@ const mineflayer = require('mineflayer')
 const { categories } = require('./data.json')
 require('dotenv').config(); // read the env
 
+/**
+ * REMEMBER TO FINISH BUILDING BLOCKS CATEGORY
+ */
+
 //check config
 if (!process.env.CONTROL_ACCOUNTS || process.env.CONTROL_ACCOUNTS.length == 0) throw new Error("Owner not specified!")
 var bot = mineflayer.createBot({
@@ -24,6 +28,8 @@ let invViewerOps = {
 }
 
 let activityInterval = null;
+/** @type {ChestNode[]} */
+var chestNodes = [];
 
 class ChestNode {
     /**
@@ -38,6 +44,8 @@ class ChestNode {
         this.x = x
         this.y = y
         this.z = z
+        this.full = false
+        this.lastAccessed = 0
         // Generate now, so we don't have to do it later
         this.Vec3 = new Vec3(x, y, z)
     }
@@ -51,7 +59,7 @@ class ChestNode {
  * @returns {ChestNode[]|null} The results of the search. Can be null
  */
 function setupChests() {
-    allDestinations = [];//empty the list first
+    chestNodes = [];//empty the list first
     //don't forget to catch specialty chests too, e.g. "Gold" would override the classifier and cause the bot to prioritize putting gold in there if it can
     bot.findBlocks({
         matching: block => block.displayName == "Chest" ? true : false, count: 10
@@ -59,11 +67,11 @@ function setupChests() {
         let signText = testAround(block.x, block.y, block.z)
         if (signText) {
             var text = signText.trim().toLowerCase()
-            var entry = config.categories.find(category =>
+            var entry = categories.find(category =>
                 category.aliases.includes(text)
             )
             if (entry) {
-                allDestinations.push(new ChestNode(entry.name, block.x, block.y, block.z))
+                chestNodes.push(new ChestNode(entry.name, block.x, block.y, block.z))
                 bot.chat(`Registered ${block} as ${entry.name}`)
                 console.log(`Registered ${block} as ${entry.name}`)
             } else {
@@ -72,12 +80,11 @@ function setupChests() {
             }
         }
     })
-    if (allDestinations.length > 0) {
-        let o = allDestinations[0].Vec3
+    if (chestNodes.length > 0) {
+        let o = chestNodes[0].Vec3
         bot.pathfinder.setGoal(new GoalNear(o.x, o.y, o.z, 2))
     } else {
-        bot.chat("There aren't any chests with signs on them nearby!")
-        bot.chat("Please lead me to your chest room before using this command.")
+        console.log("No chests found!")
     }
 }
 
@@ -132,18 +139,132 @@ bot.once('spawn', () => {
 
     const startSorting = () => {
         setupChests();
+        if (chestNodes.length == 0) return;
         activityInterval = setInterval(() => {
+            // Do not start another tick if a window is already open
+            if (bot.currentWindow) return;
+            let currentNode = chestNodes[0]
+            let chest = bot.blockAt(currentNode.Vec3)
+            let botItems = bot.inventory.items()
+            let freeBotSlots = 0;
+            let freeChestSlots = 0;
+            for (let i = 9; i < 44; i++) {
+                // I know those are weird numbers, but it's just how the inventory API works
+                // Trust me....
+                if (bot.inventory.slots[i] == null) freeBotSlots++;
+            }
+            chestNodes.push(chestNodes.shift())
 
+            // Use bot.canDigBlock to verify range of chest
+            if (bot.canDigBlock(chest)) {
+                console.log(`Opening ${chest}`)
+                bot.openChest(chest).then((c) => {
+                    currentNode.lastAccessed = Date.now()
+                    // Normal chest range: 0-26
+                    // Double chest range: 0-53
+                    // First identify the chest type using the window title
+                    let largeChest;
+                    let chestSlots = [];
+                    if (bot.currentWindow.title == '{"translate":"container.chest"}') { largeChest = false; }
+                    else if (bot.currentWindow.title == '{"translate":"container.chestDouble"}') { largeChest = true; }
+                    else {
+                        console.log(`Unknown chest type: ${bot.currentWindow.title}`)
+                        return;
+                    }
+                    // Update chestSlots while counting free slots
+                    if (largeChest) {
+                        for (let i = 0; i < 53; i++) {
+                            if (bot.currentWindow.slots[i] == null) freeChestSlots++;
+                            chestSlots.push(bot.currentWindow.slots[i])
+                        }
+                    } else {
+                        for (let i = 0; i < 26; i++) {
+                            if (bot.currentWindow.slots[i] == null) freeChestSlots++;
+                            chestSlots.push(bot.currentWindow.slots[i])
+                        }
+                    }
+                    const extractItems = () => {
+                        return new Promise((resolve) => {
+                            let withdrawQueue = [];
+                            setTimeout(() => {
+                                console.log("Withdrawing took too long, aborting")
+                                resolve()
+                            }, 5000);
+                            for (let i = 0; i < chestSlots.length; i++) {
+                                let item = chestSlots[i]
+                                if (item) {
+                                    if (!currentNode.allowedItems.includes(item.name) && freeBotSlots >= 1) {
+                                        withdrawQueue.push(item)
+                                    }
+                                }
+                            }
+                            if (withdrawQueue.length >= 1) {
+                                // Start withdrawing
+                                let withdraw = (item) => {
+                                    console.log(`Withdrawing ${item.name} x${item.count}`)
+                                    c.withdraw(item.type, item.metadata, item.count).then(() => {
+                                        freeBotSlots--;
+                                        if (withdrawQueue.length >= 1) {
+                                            withdraw(withdrawQueue.shift())
+                                        } else {
+                                            console.log("Withdrawing finished")
+                                            resolve()
+                                        }
+                                    })
+                                }
+                                withdraw(withdrawQueue.shift())
+                            }
+                        })
+                    }
+                    const insertItems = () => {
+                        return new Promise((resolve) => {
+                            let depositQueue = [];
+                            setTimeout(() => {
+                                console.log("Depositing took too long, aborting")
+                                resolve()
+                            }, 5000);
+                            for (let i = 0; i < botItems.length; i++) {
+                                let item = botItems[i]
+                                if (item) {
+                                    if (currentNode.allowedItems.includes(item.name) && freeChestSlots >= 1) {
+                                        depositQueue.push(item)
+                                    }
+                                }
+                            }
+                            if (depositQueue.length >= 1) {
+                                // Start depositing
+                                let deposit = (item) => {
+                                    console.log(`Depositing ${item.name} x${item.count}`)
+                                    c.deposit(item.type, item.metadata, item.count).then(() => {
+                                        freeChestSlots--;
+                                        if (depositQueue.length >= 1) {
+                                            deposit(depositQueue.shift())
+                                        } else {
+                                            console.log("Depositing finished")
+                                            resolve()
+                                        }
+                                    })
+                                }
+                                deposit(depositQueue.shift())
+                            }
+                        })
+                    }
+                    Promise.all([
+                        insertItems(), extractItems()
+                    ]).then(() => c.close())
+                })
+            }
         }, 1000)
     }
 
     bot.on('chat', (username, message) => {
-        console.log(`${username}: ${message}`)
+        console.log(`> ${username}: ${message}`)
         if (!process.env.CONTROL_ACCOUNTS.includes(username)) return;
         if (!message.startsWith(".")) return;
         let command = message.substring(1).split(" ")[0].toLowerCase()
 
         switch (command) {
+            case "sort":
             case "start":
                 startSorting()
                 break;
@@ -164,6 +285,22 @@ bot.once('spawn', () => {
                     if (!target) return;
                     bot.pathfinder.setGoal(new GoalNear(target.position.x, target.position.y, target.position.z, 2))
                 }, 250)
+                break;
+
+            case "sleep":
+                if (activityInterval) clearInterval(activityInterval)
+                let bed = bot.findBlock({ matching: block => block.displayName == "Bed", count: 1 })
+                if (bed) {
+                    bot.pathfinder.setGoal(new GoalNear(bed.x, bed.y, bed.z, 2))
+
+                    /**
+                     * UNFINISHED
+                     */
+
+
+                } else {
+                    console.log("No bed found!")
+                }
                 break;
         }
     })
