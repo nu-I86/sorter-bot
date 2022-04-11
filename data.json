@@ -1,6 +1,13 @@
 {
     "categories": [
         {
+            "name": "deposit",
+            "aliases": [
+                "deposit"
+            ],
+            "items": []
+        },
+        {
             "name": "potions",
             "aliases": [
                 "potions",
@@ -192,6 +199,20 @@
                 "beetroot_soup",
                 "sweet_berries",
                 "honey_bottle"
+            ]
+        },
+        {
+            "name": "cookable",
+            "aliases": [
+                "cookable",
+                "cookables"
+            ],
+            "items": [
+                "porkchop",
+                "beef",
+                "chicken",
+                "mutton",
+                "rabbit"
             ]
         },
         {
@@ -506,7 +527,8 @@
                 "building"
             ],
             "items": [
-                "planks"
+                "planks",
+                "stone"
             ]
         },
         {
