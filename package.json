@@ -6,14 +6,15 @@
   "dependencies": {
     "dotenv": "^16.0.0",
     "mineflayer": "^4.2.0",
+    "mineflayer-auto-eat": "^2.3.3",
     "mineflayer-pathfinder": "^2.0.0",
     "mineflayer-web-inventory": "^1.7.1",
     "prismarine-block": "^1.15.0",
     "prismarine-entity": "^2.1.0",
     "prismarine-item": "^1.11.3",
-    "prismarine-windows": "^2.4.3"
+    "prismarine-windows": "^2.4.3",
+    "ts-node": "^10.7.0"
   },
-  "devDependencies": {},
   "scripts": {
     "test": "node app.js"
   },
