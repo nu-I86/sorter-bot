@@ -1,11 +1,12 @@
 require('dotenv').config();
 const mineflayer = require('mineflayer')
 const { categories } = require('./data.json')
-
-import readline from 'readline';
-import colors from 'colors';
-
-var controlAccounts: string[] = JSON.parse(process.env.CONTROL_ACCOUNTS ? process.env.CONTROL_ACCOUNTS : "[]") as Array<string>;
+const { GoalNear, GoalFollow, GoalInvert } = require('mineflayer-pathfinder').goals;
+var controlAccounts: string[] =
+    JSON.parse(process.env.CONTROL_ACCOUNTS
+        ? process.env.CONTROL_ACCOUNTS
+        : "[]"
+    ) as Array<string>;
 if (controlAccounts.length == 0) { throw new Error('CONTROL_ACCOUNTS is not defined') }
 
 //check config
@@ -17,21 +18,6 @@ var bot = mineflayer.createBot({
     version: false,     // auto-detect version
     auth: 'microsoft' // Comment this and the password above to use offline accounts
 })
-
-const { pathfinder, Movements } = require('mineflayer-pathfinder')
-const inventoryViewer = require('mineflayer-web-inventory')
-const { GoalNear, GoalFollow, GoalInvert } = require('mineflayer-pathfinder').goals;
-import { Item } from 'prismarine-item';
-import { Vec3 } from 'vec3';
-
-bot.loadPlugin(pathfinder)
-
-let activityInterval: NodeJS.Timer | null = null
-let runningActivity: boolean = false
-let idleInterval: NodeJS.Timer | null = null; // Controls more subtle functions
-let _h = 20;
-var chestNodes: ChestNode[] = [];
-
 class ChestNode {
     type: ("potions" | "brewing" | "weapons" | "food" | "farming" | "transport" | "tools" | "armor" | "glass" | "wool" | "redstone" | "concrete" | "banner" | "building_blocks" | "ore" | "dye" | "clay" | "materials" | "music" | "misc")
     x: number
@@ -56,9 +42,24 @@ class ChestNode {
     }
 }
 
+import readline from 'readline';
+import colors from 'colors';
+import { pathfinder, Movements } from 'mineflayer-pathfinder';
+import inventoryViewer from 'mineflayer-web-inventory';
+import { Item } from 'prismarine-item';
+import { Vec3 } from 'vec3';
+
+let activityInterval: NodeJS.Timer | null = null
+let runningActivity: boolean = false
+let idleInterval: NodeJS.Timer | null = null; // Controls more subtle functions
+let _h = 20;
+var chestNodes: ChestNode[] = [];
+
+bot.loadPlugin(pathfinder)
+
+
 function setupChests() {
     chestNodes = [];//empty the list first
-    //don't forget to catch specialty chests too, e.g. "Gold" would override the classifier and cause the bot to prioritize putting gold in there if it can
     bot.findBlocks({
         matching: (block: { displayName: string; }) => block.displayName == "Chest" ? true : false, count: 10
     }).forEach((block: { x: any; y: any; z: any; }) => {//searches for chests
