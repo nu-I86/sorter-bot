@@ -3,6 +3,7 @@ const mineflayer = require('mineflayer')
 const { categories } = require('./data.json')
 
 import readline from 'readline';
+import colors from 'colors';
 
 var controlAccounts: string[] = JSON.parse(process.env.CONTROL_ACCOUNTS ? process.env.CONTROL_ACCOUNTS : "[]") as Array<string>;
 if (controlAccounts.length == 0) { throw new Error('CONTROL_ACCOUNTS is not defined') }
@@ -69,9 +70,9 @@ function setupChests() {
             )
             if (entry) {
                 chestNodes.push(new ChestNode(entry.name, block.x, block.y, block.z))
-                log(`Registered ${block} as ${entry.name}`)
+                log(colors.cyan(`Registered ${block} as ${entry.name}`))
             } else {
-                log(`Unknown category: ${text}`)
+                log(colors.yellow(`Unknown category: ${text}`))
             }
         }
     })
@@ -79,7 +80,7 @@ function setupChests() {
         let o = chestNodes[0].Vec3
         bot.pathfinder.setGoal(new GoalNear(o.x, o.y, o.z, 2))
     } else {
-        log("No chests found!")
+        log(colors.red("No chests found!"))
     }
 }
 
@@ -133,7 +134,7 @@ const startSorting = () => {
         // If it is, throw an error in the log and remove the node from the list
         let blockAt = bot.blockAt(currentNode.Vec3)
         if (blockAt.name == "air") {
-            log(`Chest at ${currentNode.Vec3} is missing!`)
+            log(colors.red(`Chest at ${currentNode.Vec3} is missing!`))
             chestNodes.shift()
             return;
         }
@@ -151,7 +152,7 @@ const startSorting = () => {
                 if (bot.currentWindow.title == '{"translate":"container.chest"}') { largeChest = false; }
                 else if (bot.currentWindow.title == '{"translate":"container.chestDouble"}') { largeChest = true; }
                 else {
-                    log(`Unknown chest type: ${bot.currentWindow.title}`)
+                    log(colors.yellow(`Unknown chest type: ${bot.currentWindow.title}`))
                     return;
                 }
                 // Update chestSlots while counting free slots
@@ -184,7 +185,7 @@ const startSorting = () => {
                         if (withdrawQueue.length >= 1) {
                             // Start withdrawing
                             let withdraw = (item: { name: any; count: any; type: any; metadata: any; }) => {
-                                log(`Withdrawing ${item.name} x${item.count} from ${currentNode.type}`)
+                                log(colors.cyan(`Withdrawing ${item.name} x${item.count} from ${currentNode.type}`))
                                 c.withdraw(item.type, item.metadata, item.count).then(() => {
                                     freeBotSlots--;
                                     if (withdrawQueue.length >= 1) {
@@ -218,7 +219,7 @@ const startSorting = () => {
                         if (depositQueue.length >= 1) {
                             // Start depositing
                             let deposit = (item: { name: any; count: any; type: any; metadata: any; }) => {
-                                log(`Depositing ${item.name} x${item.count} in ${currentNode.type}`)
+                                log(colors.cyan(`Depositing ${item.name} x${item.count} in ${currentNode.type}`))
                                 c.deposit(item.type, item.metadata, item.count).then(() => {
                                     freeChestSlots--;
                                     if (depositQueue.length >= 1) {
@@ -304,12 +305,12 @@ const runCmd = (command: string) => {
                 bot.pathfinder.setGoal(new GoalNear(bed.x, bed.y, bed.z, 2))
                 bot.sleep(bed).catch((err: any) => log(err))
             } else {
-                log("No bed found!")
+                log(colors.yellow(`No bed found`))
             }
             break;
 
         default:
-            log(`Unknown command: ${command}`)
+            log(colors.yellow(`Unknown command: ${command}`))
             break;
     }
 }
@@ -333,12 +334,12 @@ const prompt = () => {
 };
 const log = (message: string) => {
     if (rPrompt) {
+        // Delete the prompt line
         process.stdout.write("\r\x1b[K")
-        process.stdout.write(`${message}\n> `)
         rPrompt = false;
-    } else {
-        process.stdout.write(`${message}\n`)
     }
+    process.stdout.write(`${message}\n`)
+    if (!rPrompt) { process.stdout.write("> "); rPrompt = true }
 }
 
 setTimeout(() => {
@@ -346,13 +347,13 @@ setTimeout(() => {
     prompt();
 }, 3000);
 // Bot events
-bot.on('kicked', (reason: string) => log("Kicked: " + reason))
-bot.on('login', () => log("Logged in"))
-bot.on('death', () => log("I died..."))
-bot.on('error', (err: any) => log(err))
+bot.on('kicked', (reason: string) => log(colors.red(`Kicked: ${reason}`)))
+bot.on('login', () => log(colors.green(`Logged in`)))
+bot.on('death', () => log(colors.red(`"I died..."`)))
+bot.on('error', (err: any) => log(colors.red(err)))
 bot.on('entityHurt', (entity: any) => {
     if (entity == bot.entity) {
-        log("I was hurt!")
+        log(colors.red(`"I was hurt!"`))
         let closestEntity = bot.nearestEntity((e: { type: string; }) => e.type == "player" || e.type == "mob")
         if (closestEntity) {
             // Run from the closest enemy
@@ -369,8 +370,8 @@ bot.on('entityHurt', (entity: any) => {
     }
 })
 bot.on('health', () => {
-    log("Health: " + bot.health)
-    log("Food: " + bot.food)
+    log(colors.dim(`Health: ${bot.health}`))
+    log(colors.dim(`Food: ${bot.food}`))
     if (bot.food < 18) {
         // Eat stuff
         let foodCategory = categories.find((c: { name: string; }) => c.name == "food")
