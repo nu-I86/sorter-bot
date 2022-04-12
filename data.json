@@ -505,7 +505,10 @@
                 "road",
                 "concrete road"
             ],
-            "items": []
+            "items": [
+                "concrete",
+                "concrete_powder"
+            ]
         },
         {
             "name": "banner",
@@ -524,6 +527,7 @@
                 "construction blocks",
                 "construction block",
                 "building blocks",
+                "building block",
                 "building"
             ],
             "items": [
@@ -566,13 +570,12 @@
                 "piston_extension",
                 "yellow_flower",
                 "red_flower",
-                "brown_mushroom",
-                "red_mushroom",
                 "gold_block",
                 "iron_block",
                 "double_stone_slab",
                 "stone_slab",
                 "brick_block",
+                "stone_bricks",
                 "tnt",
                 "bookshelf",
                 "mossy_cobblestone",
@@ -618,10 +621,6 @@
                 "soul_sand",
                 "glowstone",
                 "portal",
-                "lit_pumpkin",
-                "cake",
-                "unpowered_repeater",
-                "powered_repeater",
                 "stained_glass",
                 "trapdoor",
                 "monster_egg",
@@ -777,10 +776,7 @@
                 "brown_glazed_terracotta",
                 "green_glazed_terracotta",
                 "red_glazed_terracotta",
-                "black_glazed_terracotta",
-                "concrete",
-                "concrete_powder",
-                "structure_block"
+                "black_glazed_terracotta"
             ]
         },
         {
@@ -793,6 +789,8 @@
             "items": [
                 "gold_ore",
                 "iron_ore",
+                "raw_iron",
+                "raw_copper",
                 "coal_ore",
                 "lapis_ore",
                 "diamond_ore",
