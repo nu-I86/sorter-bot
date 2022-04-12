@@ -45,7 +45,6 @@ class ChestNode {
 import readline from 'readline';
 import colors from 'colors';
 import { pathfinder, Movements } from 'mineflayer-pathfinder';
-import inventoryViewer from 'mineflayer-web-inventory';
 import { Item } from 'prismarine-item';
 import { Vec3 } from 'vec3';
 
