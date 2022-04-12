@@ -2,10 +2,6 @@ const mineflayer = require('mineflayer')
 const { categories } = require('./data.json')
 require('dotenv').config(); // read the env
 
-/**
- * REMEMBER TO FINISH BUILDING BLOCKS CATEGORY
- */
-
 var controlAccounts: String[] | null = process.env.CONTROL_ACCOUNTS ? JSON.parse(process.env.CONTROL_ACCOUNTS) as Array<string> : null;
 if (!controlAccounts || controlAccounts.length == 0) { throw new Error('CONTROL_ACCOUNTS is not defined') }
 
@@ -265,9 +261,7 @@ bot.on('entityHurt', (entity: any) => {
                 bot.pathfinder.setGoal(new GoalInvert(new GoalFollow(closestEntity, 20)), true)
                 timeLeft--;
                 if (timeLeft <= 0) {
-                    bot.pathfinder.setGoal(null)
-                    activityInterval ? clearInterval(activityInterval) : null
-                    activityInterval = null
+                    resetActivity()
                 }
             }, 1000);
         }
@@ -283,11 +277,13 @@ bot.on('health', () => {
         if (edibleItems.length >= 1) {
             // There is an issue with this functions internal promise not being resolved
             // I think it has to do with the inventory not being updated, but I can't find the cause
-            bot.consume().then(() => {
-                console.log("Finished eating")
-            }).catch((err: any) => {
-                console.log(err)
-            })
+            // So I'm going to disable it until my issue is fixed
+            // https://github.com/PrismarineJS/mineflayer/issues/2568
+            //   bot.consume().then(() => {
+            //       console.log("Finished eating")
+            //   }).catch((err: any) => {
+            //       console.log(err)
+            //   })
         }
     }
 })
@@ -310,7 +306,7 @@ bot.once('spawn', () => {
             // 33% chance to look in the direction of the player
             // and 33% chance to randomly walk a short distance
             if (Math.random() < 0.33) {
-                // pitch is a random number between -30 and 30 degrees converted to radians
+                // Why the hell does this have to be radians?
                 let p = (Math.random() * 60 - 30) * Math.PI / 180
                 bot.look(Math.random() * 360, p, true)
             } else if (Math.random() < 0.33) {
