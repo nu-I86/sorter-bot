@@ -1,5 +1,5 @@
 require('dotenv').config();
-const mineflayer = require('mineflayer')
+import mineflayer from 'mineflayer';
 const { categories } = require('./data.json')
 const { GoalNear, GoalFollow, GoalInvert } = require('mineflayer-pathfinder').goals;
 var controlAccounts: string[] =
@@ -12,12 +12,12 @@ if (controlAccounts.length == 0) { throw new Error('CONTROL_ACCOUNTS is not defi
 //check config
 var bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST ? process.env.MINECRAFT_HOST : "localhost",
-    port: process.env.MINECRAFT_PORT ? process.env.MINECRAFT_PORT : 25565,
+    port: process.env.MINECRAFT_PORT ? Number.parseInt(process.env.MINECRAFT_PORT) : 25565,
     username: process.env.BOT_USERNAME ? process.env.BOT_USERNAME : "sorter_bot",
     password: process.env.BOT_PASSWORD,
-    version: false,     // auto-detect version
     auth: 'microsoft' // Comment this and the password above to use offline accounts
 })
+if (typeof bot === 'undefined') { throw new Error('Bot is undefined') }
 class ChestNode {
     type: ("potions" | "brewing" | "weapons" | "food" | "farming" | "transport" | "tools" | "armor" | "glass" | "wool" | "redstone" | "concrete" | "banner" | "building_blocks" | "ore" | "dye" | "clay" | "materials" | "music" | "misc")
     x: number
@@ -46,7 +46,9 @@ import readline from 'readline';
 import colors from 'colors';
 import { pathfinder, Movements } from 'mineflayer-pathfinder';
 import { Item } from 'prismarine-item';
+import { Block } from 'prismarine-block';
 import { Vec3 } from 'vec3';
+import { Entity } from 'prismarine-entity';
 
 let activityInterval: NodeJS.Timer | null = null
 let runningActivity: boolean = false
@@ -87,26 +89,31 @@ function setupChests() {
 /**
  * Searches for a sign around the block, and returns the text if found
  */
-function testAround(x: number, y: number, z: number): string | null {
+function testAround(x: number, y: number, z: number): string | undefined {
     let testPos = new Vec3(x, y, z)
+    let blockObj: Block;
     testPos.x++;
-    if (bot.blockAt(testPos).name.includes("sign")) {//pos x
-        return bot.blockAt(testPos).signText
+    blockObj = bot.blockAt(testPos) as Block;
+    if (blockObj ? blockObj.name.includes("sign") : false) {//pos x
+        return blockObj.signText
     }
     testPos.x -= 2;
-    if (bot.blockAt(testPos).name.includes("sign")) {//negative x
-        return bot.blockAt(testPos).signText
+    blockObj = bot.blockAt(testPos) as Block;
+    if (blockObj ? blockObj.name.includes("sign") : false) {//negative x
+        return blockObj.signText
     }
     testPos.x++;//reset x
     testPos.z++;
-    if (bot.blockAt(testPos).name.includes("sign")) {//pos z
-        return bot.blockAt(testPos).signText
+    blockObj = bot.blockAt(testPos) as Block;
+    if (blockObj ? blockObj.name.includes("sign") : false) {//pos z
+        return blockObj.signText
     }
     testPos.z -= 2;
-    if (bot.blockAt(testPos).name.includes("sign")) {//negative z
-        return bot.blockAt(testPos).signText
+    blockObj = bot.blockAt(testPos) as Block;
+    if (blockObj ? blockObj.name.includes("sign") : false) {//negative z
+        return blockObj.signText
     }
-    return null;
+    return undefined;
 }
 
 const startSorting = () => {
@@ -120,7 +127,7 @@ const startSorting = () => {
             bot.pathfinder.setGoal(new GoalNear(currentNode.Vec3.x, currentNode.Vec3.y, currentNode.Vec3.z, 2))
             return;
         }
-        let chest = bot.blockAt(currentNode.Vec3)
+        let chest = bot.blockAt(currentNode.Vec3) as Block;
         let botItems = bot.inventory.items()
         let freeBotSlots = 0;
         let freeChestSlots = 0;
@@ -132,7 +139,7 @@ const startSorting = () => {
         chestNodes.push(chestNodes.shift() as ChestNode)
         // Make sure the block at the location isn't air
         // If it is, throw an error in the log and remove the node from the list
-        let blockAt = bot.blockAt(currentNode.Vec3)
+        let blockAt = bot.blockAt(currentNode.Vec3) as Block;
         if (blockAt.name == "air") {
             log(colors.red(`Chest at ${currentNode.Vec3} is missing!`))
             chestNodes.shift()
@@ -149,6 +156,7 @@ const startSorting = () => {
                 // First identify the chest type using the window title
                 let largeChest: boolean;
                 let chestSlots: (Item | null)[] = [];
+                if (!bot.currentWindow) return;
                 if (bot.currentWindow.title == '{"translate":"container.chest"}') { largeChest = false; }
                 else if (bot.currentWindow.title == '{"translate":"container.chestDouble"}') { largeChest = true; }
                 else {
@@ -255,7 +263,7 @@ const resetActivity = () => {
 }
 
 
-
+// TODO : Add a way to execute in-game commands via the command line
 
 const runCmd = (command: string) => {
     let cmd = command.split(" ")[0]
@@ -284,7 +292,7 @@ const runCmd = (command: string) => {
             resetActivity()
             activityInterval = null // Just to prevent the bot from moving
             runningActivity = true
-            let targetEntC = bot.nearestEntity((e: { name: string; username: any; }) => e.name == "player" && e.username == username)
+            let targetEntC = bot.nearestEntity(e => e.name == "player" && e.username == username)
             if (!targetEntC) return;
             bot.pathfinder.setGoal(new GoalNear(targetEntC.position.x, targetEntC.position.y, targetEntC.position.z, 2))
             break;
@@ -293,20 +301,26 @@ const runCmd = (command: string) => {
             resetActivity()
             activityInterval = null // Just to prevent the bot from moving
             runningActivity = true
-            let targetEntF = bot.nearestEntity((e: { type: string; name: any; }) => e.type == "player" && e.name != username)
+            let targetEntF = bot.nearestEntity(e => e.type == "player" && e.name != username)
             if (!targetEntF) return;
             bot.pathfinder.setGoal(new GoalFollow(targetEntF, 2), true)
             break;
 
         case "sleep":
             resetActivity()
-            let bed = bot.findBlock({ matching: (block: { displayName: string | string[]; }) => block.displayName.includes("Bed") && block.displayName != "Bedrock", count: 1 })
+            let bed = bot.findBlock({ matching: (block: { displayName: string | string[]; }) => block.displayName.includes("Bed") && block.displayName != "Bedrock", count: 1 }) as Block;
+            let bedPos = bed.position;
             if (bed) {
-                bot.pathfinder.setGoal(new GoalNear(bed.x, bed.y, bed.z, 2))
+                bot.pathfinder.setGoal(new GoalNear(bedPos.x, bedPos.y, bedPos.z, 2))
                 bot.sleep(bed).catch((err: any) => log(err))
             } else {
                 log(colors.yellow(`No bed found`))
             }
+            break;
+
+        case "eat":
+            // Emit the health event to force an update
+            bot.emit("health")
             break;
 
         default:
@@ -351,7 +365,7 @@ bot.on('kicked', (reason: string) => log(colors.red(`Kicked: ${reason}`)))
 bot.on('login', () => log(colors.green(`Logged in`)))
 bot.on('death', () => log(colors.red(`"I died..."`)))
 bot.on('error', (err: any) => log(colors.red(err)))
-bot.on('entityHurt', (entity: any) => {
+bot.on('entityHurt', (entity: Entity) => {
     if (entity == bot.entity) {
         log(colors.red(`"I was hurt!"`))
         let closestEntity = bot.nearestEntity((e: { type: string; }) => e.type == "player" || e.type == "mob")
@@ -369,7 +383,7 @@ bot.on('entityHurt', (entity: any) => {
         }
     }
 })
-bot.on('health', () => {
+bot.on('health', async () => {
     log(colors.dim(`Health: ${bot.health}`))
     log(colors.dim(`Food: ${bot.food}`))
     if (bot.food < 18) {
@@ -381,11 +395,12 @@ bot.on('health', () => {
             // I think it has to do with the inventory not being updated, but I can't find the cause
             // So I'm going to disable it until my issue is fixed
             // https://github.com/PrismarineJS/mineflayer/issues/2568
-            //   bot.consume().then(() => {
-            //       log("Finished eating")
-            //   }).catch((err: any) => {
-            //       log(err)
-            //   })
+            bot.inventory.updateSlot(36, edibleItems[0])
+            try {
+                await bot.consume()
+            } catch (err) {
+                log(colors.red("Error eating food:\n" + err as string))
+            }
         }
     }
 })
@@ -414,7 +429,7 @@ bot.once('spawn', () => {
             } else if (Math.random() < 0.33) {
                 let targetEnt = bot.nearestEntity((e: { type: string; }) => e.type == "player")
                 if (targetEnt) {
-                    let targetBlock = bot.blockAt(targetEnt.position)
+                    let targetBlock = bot.blockAt(targetEnt.position) as Block;
                     if (bot.canSeeBlock(targetBlock)) {
                         bot.lookAt(targetBlock.position.offset(0, 1.6, 0))
                     }
