@@ -1,7 +1,6 @@
 require('dotenv').config();
 import mineflayer from 'mineflayer';
-const { categories } = require('./data.json')
-const { GoalNear, GoalFollow, GoalInvert } = require('mineflayer-pathfinder').goals;
+import { categories } from './data.json';
 var controlAccounts: string[] =
     JSON.parse(process.env.CONTROL_ACCOUNTS
         ? process.env.CONTROL_ACCOUNTS
@@ -18,8 +17,10 @@ var bot = mineflayer.createBot({
     auth: 'microsoft' // Comment this and the password above to use offline accounts
 })
 if (typeof bot === 'undefined') { throw new Error('Bot is undefined') }
+
+declare type ChestType = ("potions" | "brewing" | "weapons" | "food" | "farming" | "transport" | "tools" | "armor" | "glass" | "wool" | "redstone" | "concrete" | "banner" | "building_blocks" | "ore" | "dye" | "clay" | "materials" | "music" | "misc")
 class ChestNode {
-    type: ("potions" | "brewing" | "weapons" | "food" | "farming" | "transport" | "tools" | "armor" | "glass" | "wool" | "redstone" | "concrete" | "banner" | "building_blocks" | "ore" | "dye" | "clay" | "materials" | "music" | "misc")
+    type: ChestType
     x: number
     y: number
     z: number
@@ -27,7 +28,7 @@ class ChestNode {
     lastAccessed: number
     Vec3: Vec3
     allowedItems: any;
-    constructor(type: "potions" | "brewing" | "weapons" | "food" | "farming" | "transport" | "tools" | "armor" | "glass" | "wool" | "redstone" | "concrete" | "banner" | "building_blocks" | "ore" | "dye" | "clay" | "materials" | "music" | "misc", x: any, y: any, z: any) {
+    constructor(type: ChestType, x: any, y: any, z: any) {
         this.type = type
         // Just leave blank if not found
         let f = categories.find((cat: { name: string; }) => cat.name == type)
@@ -42,6 +43,7 @@ class ChestNode {
     }
 }
 
+const { GoalNear, GoalFollow, GoalInvert } = require('mineflayer-pathfinder').goals;
 import readline from 'readline';
 import colors from 'colors';
 import { pathfinder, Movements } from 'mineflayer-pathfinder';
@@ -71,7 +73,7 @@ function setupChests() {
                 category.aliases.includes(text)
             )
             if (entry) {
-                chestNodes.push(new ChestNode(entry.name, block.x, block.y, block.z))
+                chestNodes.push(new ChestNode(entry.name as ChestType, block.x, block.y, block.z))
                 log(colors.cyan(`Registered ${block} as ${entry.name}`))
             } else {
                 log(colors.yellow(`Unknown category: ${text}`))
@@ -264,6 +266,8 @@ const resetActivity = () => {
 
 
 // TODO : Add a way to execute in-game commands via the command line
+// Add reserved food slot in the config
+// Decrease the time between chests
 
 const runCmd = (command: string) => {
     let cmd = command.split(" ")[0]
@@ -312,6 +316,7 @@ const runCmd = (command: string) => {
             let bedPos = bed.position;
             if (bed) {
                 bot.pathfinder.setGoal(new GoalNear(bedPos.x, bedPos.y, bedPos.z, 2))
+                // Wait for the pathfinder to reach the bed
                 bot.sleep(bed).catch((err: any) => log(err))
             } else {
                 log(colors.yellow(`No bed found`))
