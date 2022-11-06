@@ -1,4 +1,6 @@
 # sorter-bot
+![](https://img.shields.io/badge/Status-Abandoned-red)
+
 A simple Minecraft bot designed to organize chests based on item categories, powered by [mineflayer](https://github.com/PrismarineJS/mineflayer). A custom terminal is used for inputting commands.
 
 ## Commands
